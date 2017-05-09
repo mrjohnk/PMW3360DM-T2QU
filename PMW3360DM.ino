@@ -52,16 +52,17 @@
 #define Raw_Data_Burst  0x64
 #define LiftCutoff_Tune2  0x65
 
+//Set this to what pin your "INT0" hardware interrupt feature is on
+#define Motion_Interrupt_Pin 3
+
+const int ncs = 10;  //This is the SPI "slave select" pin that the sensor is hooked up to
 
 byte initComplete=0;
-byte testctr=0;
-unsigned long currTime;
-unsigned long timer;
-unsigned long pollTimer=0;
 volatile int xydat[2];
 volatile byte movementflag=0;
-const int ncs = 10;
 
+
+//Be sure to add the SROM file into this sketch via "Sketch->Add File"
 extern const unsigned short firmware_length;
 extern const unsigned char firmware_data[];
 
@@ -70,8 +71,8 @@ void setup() {
   
   pinMode (ncs, OUTPUT);
   
-  pinMode(3, INPUT);
-  digitalWrite(3, HIGH);
+  pinMode(Motion_Interrupt_Pin, INPUT);
+  digitalWrite(Motion_Interrupt_Pin, HIGH);
   attachInterrupt(0, UpdatePointer, FALLING);
 
   SPI.begin();
@@ -82,7 +83,6 @@ void setup() {
   
   performStartup();  
   
-  //digitalWrite(ncs, HIGH);
   delay(5000);
   
   dispRegisters();
@@ -130,8 +130,6 @@ void adns_write_reg(byte reg_addr, byte data){
 void adns_upload_firmware(){
   // send the firmware to the chip, cf p.18 of the datasheet
   Serial.println("Uploading firmware...");
-  // set the configuration_IV register in 3k firmware mode
-  //adns_write_reg(REG_Configuration_IV, 0x02); // bit 1 = 1 for 3k mode, other bits are reserved 
 
   //Write 0 to Rest_En bit of Config2 register to disable Rest mode.
   adns_write_reg(Config2, 0x20);
@@ -186,31 +184,18 @@ void performStartup(void){
   // upload the firmware
   adns_upload_firmware();
   delay(10);
-  //enable laser(bit 0 = 0b), in normal mode (bits 3,2,1 = 000b)
-  // reading the actual value of the register is important because the real
-  // default value is different from what is said in the datasheet, and if you
-  // change the reserved bytes (like by writing 0x00...) it would not work.
-
-//  byte laser_ctrl0 = adns_read_reg(REG_LASER_CTRL0);
-//  adns_write_reg(REG_LASER_CTRL0, laser_ctrl0 & 0xf0 );
-  
-  delay(1);
-
   Serial.println("Optical Chip Initialized");
   }
 
 void UpdatePointer(void){
   if(initComplete==9){
 
+    //write 0x01 to Motion register and read from it to freeze the motion values and make them available
     adns_write_reg(Motion, 0x01);
     adns_read_reg(Motion);
 
-    //digitalWrite(ncs,LOW);
     xydat[0] = (int)adns_read_reg(Delta_X_L);
-    //adns_read_reg(Delta_X_H);
     xydat[1] = (int)adns_read_reg(Delta_Y_L);
-    //adns_read_reg(Delta_Y_H);
-    //digitalWrite(ncs,HIGH);     
     
     movementflag=1;
     }
@@ -248,64 +233,14 @@ int convTwosComp(int b){
     }
   return b;
   }
-
-
-byte motionCheck(void){
-  byte m=adns_read_reg(Motion);
-  byte r=0;
-  if(m & B10000000){
-    r=1;
-    }
-  return r;
-}
-
-/*
-  void loop() {
-  currTime = millis();
   
-  if(currTime > timer){    
-    Serial.print(testctr++);
-    Serial.println(" ");
-    //Serial.println(motionCheck());
-    timer = currTime + 2000;
-    }
-    
-  
-  if(motionCheck() > 0){
-    Serial.print(".");
-    UpdatePointer();
-    xydat[0] = convTwosComp(xydat[0]);
-    xydat[1] = convTwosComp(xydat[1]);
-      if(xydat[0] != 0 || xydat[1] != 0){
-        Serial.print("x = ");
-        Serial.print(xydat[0]);
-        Serial.print(" | ");
-        Serial.print("y = ");
-        Serial.println(xydat[1]);
-        }
-    }
-  
-  }
-*/
 
+void loop() {
 
-  
-  void loop() {
-
-  
-/*
-  currTime = millis();
-
-  if(currTime > timer){    
-    //Serial.println(testctr++);
-    timer = currTime + 1000;
-    //dispRegisters();
-    Serial.println("");
-    }
-  */  
   if(movementflag){
     
-    Mouse.move(convTwosComp(xydat[0]),convTwosComp(xydat[1]));
+    //uncomment below if using Teensy from PJRC to move mouse on screen
+    //Mouse.move(convTwosComp(xydat[0]),convTwosComp(xydat[1]));
     
     Serial.print("x = ");
     Serial.print( convTwosComp(xydat[0]) );
