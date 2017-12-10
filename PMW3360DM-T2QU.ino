@@ -73,7 +73,7 @@ void setup() {
   
   pinMode(Motion_Interrupt_Pin, INPUT);
   digitalWrite(Motion_Interrupt_Pin, HIGH);
-  attachInterrupt(0, UpdatePointer, FALLING);
+  attachInterrupt(Motion_Interrupt_Pin, UpdatePointer, FALLING);
 
   SPI.begin();
   SPI.setDataMode(SPI_MODE3);
