@@ -1,8 +1,8 @@
-#PMW3360DM
+# PMW3360DM
 
 This library will get you up and running with the PMW3360DM module available from [this Tindie page](https://www.tindie.com/products/jkicklighter/pmw3360-motion-sensor/). It handles all the behind the scenes communication with the module over SPI.
 
-##Wiring
+## Wiring
 Teensy wiring:
 VI = 3.3V
 MI = MISO0 -or- DIN
