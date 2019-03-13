@@ -165,6 +165,10 @@ void adns_upload_firmware(){
     delayMicroseconds(15);
   }
 
+  adns_com_end();
+
+  delay(10);
+
   //Read the SROM_ID register to verify the ID before any other register reads or writes.
   adns_read_reg(SROM_ID);
 
@@ -173,8 +177,6 @@ void adns_upload_firmware(){
 
   // set initial CPI resolution
   adns_write_reg(Config1, 0x15);
-  
-  adns_com_end();
   }
 
 
