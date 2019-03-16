@@ -1,5 +1,6 @@
 #include <SPI.h>
 #include <avr/pgmspace.h>
+#include <Mouse.h>
 
 // Registers
 #define Product_ID  0x00
@@ -53,12 +54,13 @@
 #define LiftCutoff_Tune2  0x65
 
 //Set this to what pin your "INT0" hardware interrupt feature is on
-#define Motion_Interrupt_Pin 3
+#define Motion_Interrupt_Pin 0
 
 const int ncs = 10;  //This is the SPI "slave select" pin that the sensor is hooked up to
 
 byte initComplete=0;
 volatile int xydat[2];
+volatile int xyhdat[2];
 volatile byte movementflag=0;
 
 
@@ -73,14 +75,10 @@ void setup() {
   
   pinMode(Motion_Interrupt_Pin, INPUT);
   digitalWrite(Motion_Interrupt_Pin, HIGH);
-  attachInterrupt(0, UpdatePointer, FALLING);
+  attachInterrupt(Motion_Interrupt_Pin, UpdatePointer, FALLING);
 
   SPI.begin();
-  SPI.setDataMode(SPI_MODE3);
-  SPI.setBitOrder(MSBFIRST);
-  SPI.setClockDivider(SPI_CLOCK_DIV128);
-  //SPI.setClockDivider(4);
-
+  SPI.beginTransaction(SPISettings(2000000, MSBFIRST, SPI_MODE3));
   
   performStartup();  
   
@@ -196,7 +194,9 @@ void UpdatePointer(void){
     adns_read_reg(Motion);
 
     xydat[0] = (int)adns_read_reg(Delta_X_L);
+    xyhdat[0] = ((int)adns_read_reg(Delta_X_H) << 8) + xydat[0];
     xydat[1] = (int)adns_read_reg(Delta_Y_L);
+    xyhdat[1] = ((int)adns_read_reg(Delta_Y_H) << 8) + xydat[1];
     
     movementflag=1;
     }
@@ -229,8 +229,8 @@ void dispRegisters(void){
 
 int convTwosComp(int b){
   //Convert from 2's complement
-  if(b & 0x80){
-    b = -1 * ((b ^ 0xff) + 1);
+  if(b & 0x8000){
+    b = -1 * ((b ^ 0xffff) + 1);
     }
   return b;
   }
@@ -241,16 +241,15 @@ void loop() {
   if(movementflag){
     
     //uncomment below if using Teensy from PJRC to move mouse on screen
-    //Mouse.move(convTwosComp(xydat[0]),convTwosComp(xydat[1]));
-    
+    Mouse.move(convTwosComp(xyhdat[1]),convTwosComp(xyhdat[0]));
+
     Serial.print("x = ");
-    Serial.print( convTwosComp(xydat[0]) );
+    Serial.print( convTwosComp(xyhdat[0]) );
     Serial.print(" | ");
     Serial.print("y = ");
-    Serial.println( convTwosComp(xydat[1]) );
+    Serial.println( convTwosComp(xyhdat[1]) );
     
     movementflag=0;
     }
     
   }
-
