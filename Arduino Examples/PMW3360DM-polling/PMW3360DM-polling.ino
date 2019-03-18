@@ -64,8 +64,9 @@
 const int ncs = 10;  //This is the SPI "slave select" pin that the sensor is hooked up to
 
 byte initComplete=0;
-volatile byte xydat[2];
-volatile short xyhdat[2];
+volatile int8_t xydat[2];
+volatile int16_t xyldat[2];
+volatile int16_t xyhdat[2];
 volatile byte movementflag=0;
 byte testctr=0;
 unsigned long currTime;
@@ -171,7 +172,7 @@ void adns_upload_firmware(){
   adns_write_reg(Config2, 0x00);
 
   // set initial CPI resolution
-  adns_write_reg(Config1, 0x15);
+  adns_write_reg(Config1, 0x7);
   
   adns_com_end();
   }
@@ -202,10 +203,10 @@ void UpdatePointer(void){
     adns_write_reg(Motion, 0x01);
     adns_read_reg(Motion);
 
-    xydat[0] = (byte)adns_read_reg(Delta_X_L);
-    xyhdat[0] = ((short)adns_read_reg(Delta_X_H) << 8) + xydat[0];
-    xydat[1] = (byte)adns_read_reg(Delta_Y_L);
-    xyhdat[1] = ((short)adns_read_reg(Delta_Y_H) << 8) + xydat[1];
+    xyldat[0] = adns_read_reg(Delta_X_L);
+    xyhdat[0] = (adns_read_reg(Delta_X_H)<<8)|xyldat[0];
+    xyldat[1] = adns_read_reg(Delta_Y_L);
+    xyhdat[1] = (adns_read_reg(Delta_Y_H)<<8)|xyldat[1];
     
     movementflag=1;
     }
@@ -235,16 +236,6 @@ void dispRegisters(void){
   digitalWrite(ncs,HIGH);
 }
 
-
-int convTwosComp(int b){
-  //Convert from 2's complement
-  if(b & 0x8000){
-    b = -1 * ((b ^ 0xffff) + 1);
-    }
-  return b;
-  }
-  
-
 void loop() {
 
   currTime = millis();
@@ -256,18 +247,19 @@ void loop() {
     
   if(currTime > pollTimer){
     UpdatePointer();
-    xyhdat[0] = convTwosComp(xyhdat[0]);
-    xyhdat[1] = convTwosComp(xyhdat[1]);
-
-      if(xyhdat[0] != 0 || xyhdat[1] != 0){
-        Serial.print("x = ");
-        Serial.print(xyhdat[0]);
-        Serial.print(" | ");
-        Serial.print("y = ");
-        Serial.println(xyhdat[1]);
-        Mouse.move(xyhdat[1], xyhdat[0]);
-        }
-    pollTimer = currTime + 20;
+    int i;
+    for ( i = 0; i < 2; i++){
+      if (xyhdat[i] > 127){
+        xydat[i] = 127;}
+      else if (xyhdat[i] < -128){
+        xydat[i] = -128;}
+      else{ xydat[i] = (xyldat[i]);}
     }
-    
+
+  if(xydat[0] != 0 || xydat[1] != 0){
+     Mouse.move(xydat[1], xydat[0]);
   }
+  pollTimer = currTime + 20;
+  }
+    
+}
