@@ -5,6 +5,7 @@
 
 #include <SPI.h>
 #include <avr/pgmspace.h>
+#include <Mouse.h>
 
 // Registers
 #define Product_ID  0x00
@@ -58,12 +59,14 @@
 #define LiftCutoff_Tune2  0x65
 
 //Set this to what pin your "INT0" hardware interrupt feature is on
-#define Motion_Interrupt_Pin 9
+#define Motion_Interrupt_Pin 0
 
 const int ncs = 10;  //This is the SPI "slave select" pin that the sensor is hooked up to
 
 byte initComplete=0;
-volatile int xydat[2];
+volatile int8_t xydat[2];
+volatile int16_t xyldat[2];
+volatile int16_t xyhdat[2];
 volatile byte movementflag=0;
 byte testctr=0;
 unsigned long currTime;
@@ -81,13 +84,10 @@ void setup() {
   
   pinMode(Motion_Interrupt_Pin, INPUT);
   digitalWrite(Motion_Interrupt_Pin, HIGH);
-  attachInterrupt(9, UpdatePointer, FALLING);
+  //attachInterrupt(Motion_Interrupt_Pin, UpdatePointer, FALLING);  //not needed for polling
 
   SPI.begin();
-  SPI.setDataMode(SPI_MODE3);
-  SPI.setBitOrder(MSBFIRST);
-  SPI.setClockDivider(SPI_CLOCK_DIV128);
-  //SPI.setClockDivider(4);
+  SPI.beginTransaction(SPISettings(2000000, MSBFIRST, SPI_MODE3));
 
   
   performStartup();  
@@ -172,7 +172,7 @@ void adns_upload_firmware(){
   adns_write_reg(Config2, 0x00);
 
   // set initial CPI resolution
-  adns_write_reg(Config1, 0x15);
+  adns_write_reg(Config1, 0x7);
   
   adns_com_end();
   }
@@ -203,8 +203,10 @@ void UpdatePointer(void){
     adns_write_reg(Motion, 0x01);
     adns_read_reg(Motion);
 
-    xydat[0] = (int)adns_read_reg(Delta_X_L);
-    xydat[1] = (int)adns_read_reg(Delta_Y_L);
+    xyldat[0] = adns_read_reg(Delta_X_L);
+    xyhdat[0] = (adns_read_reg(Delta_X_H)<<8)|xyldat[0];
+    xyldat[1] = adns_read_reg(Delta_Y_L);
+    xyhdat[1] = (adns_read_reg(Delta_Y_H)<<8)|xyldat[1];
     
     movementflag=1;
     }
@@ -234,16 +236,6 @@ void dispRegisters(void){
   digitalWrite(ncs,HIGH);
 }
 
-
-int convTwosComp(int b){
-  //Convert from 2's complement
-  if(b & 0x80){
-    b = -1 * ((b ^ 0xff) + 1);
-    }
-  return b;
-  }
-  
-
 void loop() {
 
   currTime = millis();
@@ -255,17 +247,19 @@ void loop() {
     
   if(currTime > pollTimer){
     UpdatePointer();
-    xydat[0] = convTwosComp(xydat[0]);
-    xydat[1] = convTwosComp(xydat[1]);
-      if(xydat[0] != 0 || xydat[1] != 0){
-        Serial.print("x = ");
-        Serial.print(xydat[0]);
-        Serial.print(" | ");
-        Serial.print("y = ");
-        Serial.println(xydat[1]);
-        }
-    pollTimer = currTime + 20;
+    int i;
+    for ( i = 0; i < 2; i++){
+      if (xyhdat[i] > 127){
+        xydat[i] = 127;}
+      else if (xyhdat[i] < -128){
+        xydat[i] = -128;}
+      else{ xydat[i] = (xyldat[i]);}
     }
-    
-  }
 
+  if(xydat[0] != 0 || xydat[1] != 0){
+     Mouse.move(xydat[1], xydat[0]);
+  }
+  pollTimer = currTime + 20;
+  }
+    
+}
